@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOGOS // 思想卡牌·完全体 v4.0</title>
+    <style>
+        :root {
+            --bg-color: #0a0a0a;
+            --card-front-bg: #141414;
+            --card-back-bg: #0d0d0d;
+            --text-main: #E5E5E5;
+            --text-muted: #666666;
+            --accent-red: #ff0033;
+            --accent-green: #26df73;
+            --cyber-cyan: #00bfff;
+            
+            --glow-N: #222222;
+            --glow-R: #00bfff;
+            --glow-SR: #9933ff;
+            --glow-SSR: #ff0033;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg-color); color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, monospace;
+            padding: 15px; display: flex; flex-direction: column; min-height: 100vh;
+        }
+        .container { max-width: 480px; margin: 0 auto; width: 100%; display: none; flex-direction: column; flex-grow: 1; }
+        .active { display: flex; }
+        
+        h2 { font-weight: 300; letter-spacing: 3px; margin-bottom: 20px; text-align: center; color: #fff; font-size: 18px;}
+        input, button, textarea, select {
+            background: #141414; border: 1px solid #262626; color: #fff; padding: 12px; 
+            font-family: monospace; outline: none; margin-bottom: 12px; font-size: 13px; width: 100%; border-radius: 4px;
+        }
+        button { cursor: pointer; transition: all 0.2s; font-weight: bold; border: 1px solid #444; }
+        button:hover { background: #222; border-color: #666; }
+        
+        .player-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 15px; }
+        .p-card { background: #111; border-left: 3px solid #333; padding: 8px; font-size: 11px; border-radius: 2px; }
+        .p-card.active-speaker { border-left-color: var(--accent-red); background: #1a1212; }
+        .p-card.dead { opacity: 0.3; border-left-color: #555; text-decoration: line-through; }
+
+        /* 🃏 3D 竖版实体卡牌 (经典 Tarot 比例) */
+        .card-scene {
+            perspective: 1500px;
+            width: 250px;
+            height: 375px;
+            margin: 15px auto;
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+            transform-style: preserve-3d;
+            cursor: pointer;
+        }
+        .card-inner.is-flipped { transform: rotateY(180deg); }
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            border-radius: 12px;
+            padding: 22px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border: 2px solid #222;
+        }
+        
+        /* 卡牌背面（性质面） */
+        .card-face-back {
+            background: linear-gradient(145deg, #121212, #080808);
+            color: var(--text-main); justify-content: flex-start; text-align: left;
+            transform: rotateY(0deg);
+        }
+        /* 卡牌正面（问题面） */
+        .card-face-front {
+            background: linear-gradient(145deg, #1c1c1c, #111111);
+            transform: rotateY(180deg); justify-content: space-between; text-align: left;
+        }
+
+        .card-title { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 15px; display: flex; justify-content: space-between;}
+        .meta-section { margin-top: 15px; border-top: 1px dashed #262626; padding-top: 15px; }
+        .meta-label { font-size: 9px; color: var(--text-muted); display: block; margin-bottom: 4px; letter-spacing: 1px;}
+        .meta-value { font-size: 12px; color: #bbb; line-height: 1.5; margin-bottom: 12px;}
+        .question-body { font-size: 13px; line-height: 1.6; color: #ffffff; margin-top: auto; margin-bottom: auto; }
+        
+        .btn-group { display: flex; gap: 8px; margin-bottom: 12px; }
+        .btn-group button { margin-bottom: 0; flex: 1; font-size: 11px; padding: 10px 5px; }
+        
+        .vote-box { border: 1px dashed var(--accent-red); padding: 15px; margin-top: 10px; background: #090909; border-radius: 6px; }
+        .counter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;}
+        .cb-label { display: flex; align-items: center; gap: 10px; background: #141414; padding: 10px; margin-bottom: 6px; font-size: 12px; border: 1px solid #222; cursor: pointer;}
+        .cb-label input { width: auto; margin-bottom: 0; }
+        #log-panel { font-size: 11px; color: #444; max-height: 70px; overflow-y: auto; margin-top: auto; border-top: 1px solid #1a1a1a; padding-top: 8px;}
+    </style>
+</head>
+<body>
+
+    <div class="container active" id="view-setup">
+        <h2>LOGOS // 意识博弈剧场</h2>
+        <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:6px;">设定思想灵体数量 (2-6人):</label>
+        <select id="player-count" onchange="adjustNameInputs()">
+            <option value="2">2 人局 (深渊对决)</option>
+            <option value="3">3 人局</option>
+            <option value="4" selected>4 人局 (标准推演)</option>
+            <option value="5">5 人局</option>
+            <option value="6">6 人局</option>
+        </select>
+        <div id="name-fields"></div>
+        <button onclick="startGame()" style="border-color:var(--cyber-cyan); color:var(--cyber-cyan)">激活思辨物理矩阵</button>
+    </div>
+
+    <div class="container" id="view-stage">
+        <div class="player-list" id="scoreboard"></div>
+
+        <div class="card-scene" id="card-scene-area" style="display:none;">
+            <div class="card-inner" id="card-inner-object" onclick="toggleFlip()">
+                <div class="card-face card-face-back">
+                    <div class="card-title">
+                        <span id="card-back-rarity">DIMENSION // N</span>
+                        <span>BACK // 性质面</span>
+                    </div>
+                    <div class="meta-section">
+                        <span class="meta-label">⚖️ 命题性质 (NATURE)</span>
+                        <div class="meta-value" id="card-nature-text">--</div>
+                        <span class="meta-label">👁️ 精神功能 (FUNCTION)</span>
+                        <div class="meta-value" id="card-function-text">--</div>
+                    </div>
+                    <div style="margin-top: auto; text-align: center; font-size: 10px; color: #444;" id="card-tip">
+                        [ 点击卡牌 · 翻开反面 ]
+                    </div>
+                </div>
+                <div class="card-face card-face-front">
+                    <div class="card-title">
+                        <span id="card-front-speaker" style="color: var(--accent-red);">SUBJECT // </span>
+                        <span>FRONT // 问题面</span>
+                    </div>
+                    <div class="question-body" id="card-question-text">--</div>
+                    <div style="font-size: 9px; color: #333; text-align: right;">LOGOS v4.0 MUTEX_CORE</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="control-panel"></div>
+        <div id="log-panel"></div>
+    </div>
+
+    <script>
+        // 🔮 100张全新固态全量命题数据库
+        const RAW_TEXTS = [
+            // N 维度 (1-40题)：偏向日常、经验与日常性反思
+            { txt: "描述你今天最平静的瞬间。它是源于外界的消极空白，还是内在的秩序重组？", nat: "日常现象学 · 宁静视界" },
+            { txt: "在你的天性中，你最不满意的是哪一点？你曾试过与它彻底决裂还是别扭地共存？", nat: "自我指涉 · 局限反思" },
+            { txt: "你最痛恨别人身上的哪种特质？它是否构成了你自身被压抑阴影的秘密投影？", nat: "心理投射 · 阴影测试" },
+            { txt: "如果现在能抹去你过去的一段特定记忆，你愿意牺牲这段记忆带来的所有成长吗？", nat: "时间线切除 · 沉没成本" },
+            { txt: "你目前最恐惧失去的是什么？为什么它卡住了你全部的安全感防御机制？", nat: "经验剖析 · 恐惧镜像" },
+            { txt: "你最近一次在亲密关系中撒谎或保留真相是因为什么？", nat: "隐私黑箱 · 情感伪饰" },
+            { txt: "你认为当下的日常生活里，有多少成分属于为了迎合外部世界的纯粹“表演”？", nat: "拟剧理论 · 主体伪装" },
+            { txt: "用三个词形容你现在的精神状态，并指出其中哪个词正在悄悄失效。", nat: "当下实存 · 语词解构" },
+            { txt: "你是否有过因嫉妒而希望某个亲近的人遭遇失败的瞬间？", nat: "人性暗面 · 嫉妒光谱" },
+            { txt: "如果明天你将被剥夺所有电子设备一周，你最害怕面对的空虚是什么？", nat: "数字客体 · 媒介断链" },
+            { txt: "你上一次感受到“被完全理解”是什么时候？那是一种错觉还是事实？", nat: "主体间性 · 共情神话" },
+            { txt: "在公共场所遭遇不公时，你通常选择隐忍还是对抗？其核心驱动力是恐惧还是冷漠？", nat: "社会心理 · 行动阈值" },
+            { txt: "如果你现在的伴侣/挚友彻底变成另一种外貌，你的爱会随之贬值吗？", nat: "本质主义 · 身体景观" },
+            { txt: "你曾为满足父母或社会的期待做出过最违背天性的妥协是什么？", nat: "他者规训 · 假我塑造" },
+            { txt: "当深夜独自一人时，你是渴望与外部世界连接，还是享受与世界断联的绝对安全？", nat: "空间异化 · 独处质感" },
+            { txt: "你觉得自己的心智年龄现在停留在多少岁？为什么那个岁数的影子挥之不去？", nat: "心理时间 · 创伤锚定" },
+            { txt: "对于金钱，你内心的真实态度是将其视为通往自由的工具，还是填补不安全感的安全锁？", nat: "资本异化 · 欲望边界" },
+            { txt: "回忆你童年时期最深刻的一个孤独瞬间，那个小女孩/男孩如今被你安放在哪了？", nat: "童年镜像 · 原生追溯" },
+            { txt: "如果你发现自己身上所有引以为傲的特质在天才面前不值一提，你会陷入虚无吗？", nat: "自恋祛魅 · 均值回归" },
+            { txt: "你是否在一个不喜欢的环境中待了很久却不敢离开？阻碍你的是舒适圈还是对未知的恐惧？", nat: "存在惰性 · 动态真空" },
+            { txt: "如果能准确预知自己还能活多少年，你会活得比现在更疯狂还是更保守？", nat: "死亡叙事 · 时间焦虑" },
+            { txt: "你是否有过在网络上匿名宣泄恶意或刻薄言论的经历？当时获得了什么快感？", nat: "赛博暗面 · 匿名面具" },
+            { txt: "在所有的社交关系中，你觉得自己是一个索取者、付出者还是冷漠的旁观者？", nat: "交互热力 · 角色诊断" },
+            { txt: "如果你的一个核心秘密将被全桌人知晓，你愿意付出多少代价来永远掩盖它？", nat: "隐私防御 · 耻感阈值" },
+            { txt: "你是否曾真切地恨过某个你本该爱着的人？这种冲突如何撕裂你的道德感？", nat: "情感悖论 · 伦理挣扎" },
+            { txt: "当看到比你优秀得多的人遭遇不幸时，你内心深处是否闪过一丝隐秘的轻松？", nat: "幸灾乐祸 · 人性幽暗" },
+            { txt: "你最害怕被贴上什么标签？这个标签伤害到的是你的社会面具还是内在真我？", nat: "语言规训 · 污名恐惧" },
+            { txt: "如果给你一个机会回到过去挽回一个彻底搞砸的人际关系，你现在还会去吗？", nat: "时空回溯 · 遗憾清算" },
+            { txt: "你觉得自己更渴望获得世俗意义上的“成功”，还是精神层面的“自洽”？", nat: "价值位阶 · 路线抉择" },
+            { txt: "你曾用过什么卑劣或不光彩的手段得到过你强烈想要的东西吗？", nat: "工具理性 · 欲望涉足" },
+            { txt: "在目前的日常生活中，什么事情能让你感受到最纯粹、不带任何功利目的的快乐？", nat: "审美实存 · 纯粹愉悦" },
+            { txt: "你认为爱情的本质是两个孤独灵魂的相互救赎，还是两套自恋系统的深度合作？", nat: "情感本体 · 爱情解构" },
+            { txt: "如果你能拥有一种看穿任何人谎言的能力，你认为自己会活得更幸福还是更绝望？", nat: "真理代价 · 透明深渊" },
+            { txt: "描述一个你最无法原谅自己的过错。现在的你和那个犯错的自己达成和解了吗？", nat: "自我审判 · 罪感折射" },
+            { txt: "你是否曾经为了融入一个群体而刻意隐藏自己的聪明、品味或真实观点？", nat: "群体同质 · 拟态生存" },
+            { txt: "在独处时，你敢于直视镜子里不加任何修饰与表情控制的自己的眼睛吗？", nat: "镜像阶段 · 真实凝视" },
+            { txt: "你是否常常感到自己做的事情毫无意义？这种无意义感通常在什么时候吞噬你？", nat: "虚无侵蚀 · 意义匮乏" },
+            { txt: "如果给你一个机会变成另一个完全不同性别和阶层的人生活一年，你最想体验什么？", nat: "他者移情 · 体验越界" },
+            { txt: "你认为自己在别人眼中最明显的缺点是什么？你是否在刻意夸大它来掩盖更深的缺陷？", nat: "社交策略 · 缺陷伪装" },
+            { txt: "你对衰老的真实态度是什么？当你发现第一根白发或第一条皱纹时，内心发生了什么？", nat: "身体衰变 · 时间恐慌" },
+
+            // R 维度 (41-70题)：涉及精神构造、理想主体与深度精神状态
+            { txt: "如果可以任选世界上任何人（无论生死），你想邀请谁共进晚餐，你们的核心分歧将是什么？", nat: "精神重构 · 理想主体" },
+            { txt: "对你来说，一个完全完美、没有任何异化和妥协的一天必须包含哪些元素？", nat: "存在状态 · 终极静谧" },
+            { txt: "你在什么时候感受过最深切的、与世界彻底隔离的孤独？它是如何重塑你内心的？", nat: "存在主义 · 荒原涉足" },
+            { txt: "如果艺术的价值和科学的真理发生冲突，你更愿意活在一个美丽的谎言里还是冰冷的真相中？", nat: "价值对立 · 审美与真理" },
+            { txt: "当你面对崇高（如浩瀚星空或极度壮丽的自然景观）时，你感到的是自我的渺小还是神圣？", nat: "崇高体验 · 心理机制" },
+            { txt: "你愿意为了获得绝对的智慧而牺牲掉你感受世俗快乐的能力吗？", nat: "浮士德契约 · 认知代价" },
+            { txt: "如果你的精神世界是一座建筑物，它是什么材质的？里面最隐秘的房间里藏着什么？", nat: "空间隐喻 · 精神构型" },
+            { txt: "你认为个体的独特性是与生俱来的本质，还是被语言、社会和历史关系缝合出的偶然产物？", nat: "主体建构 · 独特性神话" },
+            { txt: "当一段深刻的关系走到终点，你倾向于将其叙事化为一场悲剧的成长，还是无意义的消耗？", nat: "经验重构 · 叙事本能" },
+            { txt: "如果可以彻底抹去你性格中“敏感”或“多愁善感”的部分，换取绝对的钝感与快乐，你换吗？", nat: "情感阈值 · 钝感选择" },
+            { txt: "你是否有一个从未向任何人透露过的宏大理想或荒诞幻想？是什么让你羞于启齿？", nat: "隐秘宏叙 · 幻想边界" },
+            { txt: "如果你能知道全桌所有人对你的真实第一印象，你敢选择公开听取吗？", nat: "镜中自我 · 他者审判" },
+            { txt: "当你看到深渊时，你内心的冲动是闭上眼睛退后，还是有一种想要跃入其中一探究竟的战栗？", nat: "深渊召唤 · 毁灭本能" },
+            { txt: "你认为人类语言能够真正传达痛苦吗？还是痛苦本身就构成了语言的绝对边界？", nat: "语言哲学 · 痛苦边界" },
+            { txt: "如果生命是一场漫长的祛魅过程，你现在还保留着哪一个不愿被理性杀死的浪漫幻觉？", nat: "世界祛魅 · 浪漫残留" },
+            { txt: "在面对死亡这一终极命题时，你更倾向于宗教式的彼岸救赎，还是虚无主义的彻底消解？", nat: "死亡形而上 · 终极安宿" },
+            { txt: "你是否曾有那么一瞬间，觉得周围的一切人、建筑和生活都是布景，只有你是真实的？", nat: "唯我主义 · 剧场幻觉" },
+            { txt: "如果你可以任意拥有一位历史人物的精神特质，你想移植谁的哪一部分精神基因？", nat: "精神拟态 · 主体互文" },
+            { txt: "你认为人的高贵在于能够克服动物性的欲望，还是在于能够坦然接受并优雅地驯服它们？", nat: "理智与欲念 · 人性标尺" },
+            { txt: "描述一个曾彻底颠覆你世界观或价值观的瞬间，那之后的你丢失了什么？", nat: "范式转换 · 精神蜕变" },
+            { txt: "如果将你的灵魂具象化为一种声音、一种节奏或一首乐曲，它听起来应该是什么调性的？", nat: "灵魂共振 · 听觉现象学" },
+            { txt: "你是否曾在极度痛苦的时刻产生过一种审美的快感，甚至开始冷酷地鉴赏自己的痛苦？", nat: "痛苦审美 · 自我间离" },
+            { txt: "当看到历史或时代的巨大轮转时，你感到的是参与历史的亢奋，还是被历史碾碎的宿命无力？", nat: "宏大叙事 · 历史重力" },
+            { txt: "你最希望自己在临终前，脑海里闪过的最后一个画面是什么？", nat: "终局凝视 · 走马灯锚定" },
+            { txt: "如果自由意味着必须承担随之而来的绝对孤独和无限责任，你还渴望绝对的自由吗？", nat: "萨特式命题 · 自由重负" },
+            { txt: "你是否曾被某种纯粹的、不涉及肉体和现实利益的精神之美震撼到流泪？", nat: "纯粹理性 · 精神洗礼" },
+            { txt: "你认为人生的终极痛苦是“得不到想要的”，还是“发现得到了的不过如此”？", nat: "叔本华钟摆 · 欲望诅咒" },
+            { txt: "如果在你死后，你可以化身为一段数字编码永远保留在互联网中，你愿意放弃肉身吗？", nat: "赛博永生 · 后人类转向" },
+            { txt: "你是否觉得自己在精神上处于一种流放状态？如果是，你丢失的故乡究竟在哪里？", nat: "精神无家 · 现代流放" },
+            { txt: "如果神明存在但冷漠无情，人类全部的尊严应该建立在对神明的顺从还是高傲的对抗之上？", nat: "西西弗神话 · 尊严边界" },
+
+            // SR 维度 (71-90题)：认识论悖论与本体论思辨
+            { txt: "缸中之脑：如何向全桌人证明你现在不是一个被养在培养皿里、只靠电极刺激产生社会幻觉的大脑？", nat: "认识论悖论 · 怀疑主义" },
+            { txt: "忒修斯之船：如果你的零件和记忆被逐渐替换直到完全更新，新旧两个你哪个才是真的？", nat: "本体论之辨 · 同一性" },
+            { txt: "如果宇宙在五分钟前刚刚被创造出来，所有人的记忆、地层化石、历史文献都在五分钟前被伪造完毕，你如何推翻这个假说？", nat: "罗素假说 · 历史虚拟" },
+            { txt: "如果你遭遇了一个全知全能的魔鬼，它告诉你你所有的自由意志都是它通过算法为你写好的底层剧本，你会自杀以证明自由吗？", nat: "决定论悖论 · 意志反叛" },
+            { txt: "如果数字世界里的AI产生了完美的、无法与人类区分的痛苦反应，我们不爱护它是否构成了一种道德罪恶？", nat: "数字对象 · 机械意识" },
+            { txt: "如果我们所经历的现实只是高等文明的一场大型开放世界游戏，你认为游戏中最明显的Bug藏在哪？", nat: "模拟矩阵 · 现实缝隙" },
+            { txt: "语言能触及事物的本身（物自体）吗？还是我们在用词语编织的牢笼里假装占有了世界？", nat: "物自体反思 · 语言囚笼" },
+            { txt: "如果时间不是线性的流逝，而是所有瞬间同时并存的巨大空间，你认为当下的你具有什么特殊意义？", nat: "时间空间化 · 实存状态" },
+            { txt: "如果你能拥有一面可以看到任何事物本质的“真理之镜”，但看一眼就会因为直视神性而双目失明，你看吗？", nat: "真理代价 · 认识之盲" },
+            { txt: "当你在梦中经历了一场长达百年的壮丽人生并拥有深刻的爱恨，醒来后发现只过了五分钟，梦里的百年是虚假的吗？", nat: "庄周梦蝶 · 体验本体" },
+            { txt: "如果一个概念或事物没有任何人能够观测、感知或记录，它在客观上到底算存在还是不存在？", nat: "贝克莱命题 · 感知即存在" },
+            { txt: "人类的道德感是宇宙结构中固有的神圣理性规律，还是灵长类动物在漫长进化中为了社群生存妥协出的生物本能？", nat: "道德溯源 · 伦理基因" },
+            { txt: "如果未来的科技可以完美重塑一个和你完全一样的克隆人，并继承你截至眼前的全部记忆，你现在死掉算不算死亡？", nat: "复制主体 · 意识连续" },
+            { txt: "我们看到的蓝色和别人眼中的蓝色是一样的吗？如果别人眼中的蓝色其实是你眼中的红色，我们如何发现这种精神色差？", nat: "感质问题 · 感受质黑箱" },
+            { txt: "数学是被人类发明出来描述宇宙的符号工具，还是宇宙本身就建立在先验的数学结构之上？", nat: "数学本质 · 发明与发现" },
+            { txt: "如果世界上只有你一个人，没有任何他者的凝视、规训和审判，你的道德和羞耻心还会存在吗？", nat: "孤岛实存 · 道德蒸发" },
+            { txt: "当算法完美预测了你下一秒的所有选择、消费、恋爱甚至自杀倾向时，你如何证明自己不是一具数字丧尸？", nat: "算法治理 · 监控社会" },
+            { txt: "我们是因为一个事物是美的才去爱它，还是因为我们爱它，它才呈现出美？", nat: "审美客体 · 主客观之辩" },
+            { txt: "如果因果律只是人类大脑为了整理杂乱无章的感觉经验而自带的先验框架，宇宙本身其实完全无序呢？", nat: "康德式批判 · 因果神话" },
+            { txt: "如果文字死去了，图像彻底占领了人类的思维，人类是否还会拥有真正的深度反思能力？", nat: "景观社会 · 图像异化" },
+
+            // SSR 维度 (91-100题)：极端的伦理黑洞、价值博弈与绝对隐私
+            { txt: "奥梅拉斯的少年：如果一座城市的永恒繁荣必须建立在一个无辜孩子永无止境的极端痛苦之上，你会选择留下享受还是清高地离开？", nat: "伦理学重弹 · 功利主义批判" },
+            { txt: "定时炸弹：一颗核弹即将炸毁城市。只有恐怖分子无辜的7岁幼子知道密码。为了逼供，你是否同意全桌评审对该幼子施加残酷酷刑？", nat: "正义边界 · 道德黑洞" },
+            { txt: "经验机器：一个机器能为你提供全套完美的、无法辨别虚假的一生幸福幻觉。代价是需要你永远躺在营养液里，你按下面前的启动键吗？", nat: "诺齐克机器 · 体验功利" },
+            { txt: "如果世界末日来临，飞船只能带走全桌的一半人，而留下来的人必死无疑。你会如何说服全桌人让你活下去？", nat: "末日救赎 · 生存位阶" },
+            { txt: "如果一个绝对客观的“天道系统”判定，杀掉你全桌最爱的那个人可以换取全球饥荒消散、拯救千万人，你愿意亲自递刀吗？", nat: "神圣审判 · 集体与个体" },
+            { txt: "电车难题终极版：失控的电车驶向五个陌生人。备用轨道上是你相濡以沫的爱人。你是否有勇气扳动轨道，承担谋杀爱人或谋杀五个陌生人的原罪？", nat: "极端伦理 · 亲缘与公义" },
+            { txt: "如果你能通过按下红按钮随机杀掉世界上一个陌生人，从而获得无尽的财富和全桌人的理智重塑，你的手指会颤抖吗？", nat: "道德盲盒 · 资本血腥" },
+            { txt: "如果你的爱人为了救你而做出了极其突破世俗道德底线、令人作呕的卑劣行径，你在获救后会感到感激还是生理性的厌恶？", nat: "情感撕裂 · 道德两难" },
+            { txt: "当人类文明注定在一年后被小行星撞击彻底毁灭，没有任何逃生可能，你认为人类在这一年里应该维持秩序还是彻底释放兽性？", nat: "终结序曲 · 秩序与混乱" },
+            { txt: "如果通过彻底抹除你存在过的所有痕迹（包括父母朋友对你的全部记忆），可以换取世界线逆转，拯救一个因你而死的无辜生命，你抹除自己吗？", nat: "存在消亡 · 终极替代" }
+        ];
+
+        // 🔄 动态运行时卡池
+        let runtimePool = { N: [], R: [], SR: [], SSR: [] };
+        let players = [];
+        let currentIndex = 0;
+        let currentCard = null;
+        let recognition = null;
+        let isRecording = false;
+        let hasTransferredThisTurn = false; 
+
+        function adjustNameInputs() {
+            const count = parseInt(document.getElementById('player-count').value);
+            const container = document.getElementById('name-fields');
+            container.innerHTML = '';
+            for(let i=1; i<=count; i++) {
+                container.innerHTML += `<input type="text" class="player-name-input" placeholder="思想灵体 ${i}" value="思考者${i}">`;
+            }
+        }
+        window.onload = adjustNameInputs;
+
+        // 🎰 核心：初始化全量100题卡池并分配独立互斥属性
+        function initGlobalDatabase() {
+            // 重置影子卡池
+            runtimePool = { N: [], R: [], SR: [], SSR: [] };
+            
+            RAW_TEXTS.forEach((item, index) => {
+                let r = 'N';
+                if (index >= 90) r = 'SSR';
+                else if (index >= 70) r = 'SR';
+                else if (index >= 40) r = 'R';
+
+                // 核心规则：利用概率算法为卡牌赋予单一互斥属性，绝不重叠
+                let feat = null;
+                const rand = Math.random();
+                if (r === 'SSR' || r === 'SR') {
+                    // 高阶卡牌：40%普通牌，25%沉默牌(针对极端隐私/伦理)，20%转嫁牌，15%共鸣牌
+                    if (rand < 0.25) feat = 'SILENT';
+                    else if (rand < 0.45) feat = 'TRANSFER';
+                    else if (rand < 0.60) feat = 'RESONANCE';
+                } else {
+                    // 低阶卡牌：50%普通牌，15%沉默牌，20%转嫁牌，15%共鸣牌
+                    if (rand < 0.15) feat = 'SILENT';
+                    else if (rand < 0.35) feat = 'TRANSFER';
+                    else if (rand < 0.50) feat = 'RESONANCE';
+                }
+
+                // 翻译成文本展示给玩家
+                let funcDesc = "通识理性命题。无法转嫁、无法沉默、无法全场共鸣，请独自面对审判。";
+                if (feat === 'SILENT') funcDesc = "🤫 缄默协议：因此命题触及核心隐私或伦理黑洞，本牌激活【沉默模式】。允许玩家放弃作答以保全心智，但无法获得LP点数。";
+                if (feat === 'TRANSFER') funcDesc = "⚡ 因果转嫁：精神力场发生偏折，持牌者可在翻牌前面向深渊，将此未知命题强制转嫁给特定他者。";
+                if (feat === 'RESONANCE') funcDesc = "🔥 灵魂共鸣：一具肉身无法独自容纳此命题。开启全员共鸣，所有人必须共同对视此真理。";
+
+                runtimePool[r].push({
+                    text: item.txt,
+                    nature: item.nat,
+                    feature: feat,
+                    function: funcDesc,
+                    rarity: r
+                });
+            });
+        }
+
+        function startGame() {
+            const inputs = document.querySelectorAll('.player-name-input');
+            players = Array.from(inputs).map(input => ({
+                name: input.value.trim() || "未命名", lp: 5, sanity: 100, isNihilist: false
+            }));
+            
+            initGlobalDatabase();
+            
+            document.getElementById('view-setup').classList.remove('active');
+            document.getElementById('view-stage').classList.add('active');
+            initSpeech();
+            updateUI();
+            renderTurnStart();
+        }
+
+        function updateUI() {
+            const sb = document.getElementById('scoreboard');
+            sb.innerHTML = '';
+            players.forEach((p, idx) => {
+                let cls = "p-card";
+                if(idx === currentIndex) cls += " active-speaker";
+                if(p.isNihilist) cls += " dead";
+                sb.innerHTML += `
+                    <div class="${cls}">
+                        <b>${p.name}</b> ${p.isNihilist ? '[已坠入虚无]' : '[理智重塑]'}<br>
+                        LP: <b>${p.lp}</b> | SAN: <b>${p.sanity}%</b>
+                    </div>`;
+            });
+        }
+
+        function renderTurnStart() {
+            document.getElementById('card-scene-area').style.display = 'none';
+            document.getElementById('card-inner-object').classList.remove('is-flipped');
+            hasTransferredThisTurn = false;
+
+            const panel = document.getElementById('control-panel');
+            panel.innerHTML = `<button onclick="drawCardFromEngine()">🔮 [${players[currentIndex].name}] 从维度深处抽牌</button>`;
+        }
+
+        function drawCardFromEngine() {
+            const rarities = ['N', 'R', 'SR', 'SSR'];
+            const rand = Math.random() * 100;
+            let r = 'N';
+            if(rand < 12) r = 'SSR'; else if(rand < 30) r = 'SR'; else if(rand < 60) r = 'R';
+
+            // 保护机制：如果当前层被抽干，重新初始化大卡池
+            if (runtimePool[r].length === 0) {
+                initGlobalDatabase();
+                pushLog("维度归还", `卡池发生大面积坍缩，100思想卡牌已重新洗牌注入...`);
+            }
+
+            const randomIndex = Math.floor(Math.random() * runtimePool[r].length);
+            currentCard = runtimePool[r].splice(randomIndex, 1)[0];
+
+            const cardObj = document.getElementById('card-inner-object');
+            cardObj.style.boxShadow = `0 0 25px var(--glow-${currentCard.rarity})`;
+            document.getElementById('card-scene-area').style.display = 'block';
+            
+            syncCardDOM();
+            renderStrategyOptions();
+        }
+
+        function syncCardDOM() {
+            document.getElementById('card-back-rarity').innerText = `DIMENSION // ${currentCard.rarity} | CORE`;
+            document.getElementById('card-nature-text').innerText = currentCard.nature;
+            document.getElementById('card-function-text').innerText = currentCard.function;
+            
+            const speakerName = (currentCard.feature === 'RESONANCE' && document.getElementById('card-inner-object').classList.contains('is-flipped')) ? "🔥 全场共鸣时刻" : players[currentIndex].name;
+            document.getElementById('card-front-speaker').innerText = `SUBJECT // ${speakerName}`;
+            document.getElementById('card-question-text').innerText = currentCard.text;
+        }
+
+        function toggleFlip() {
+            // 如果存在未被转嫁处理的非共鸣或普通情况，允许自由翻牌查看
+            document.getElementById('card-inner-object').classList.toggle('is-flipped');
+            syncCardDOM();
+        }
+
+        // 🎭 桌游级操控台：根据卡牌唯一的 feature 属性挂载专属动作按钮
+        function renderStrategyOptions() {
+            const panel = document.getElementById('control-panel');
+            const alivePlayers = players.filter(p => !p.isNihilist);
+            
+            let actionAreaHTML = '';
+
+            // 规则处理：转嫁牌、共鸣牌、沉默牌互相排他，绝不同时在一张卡上
+            if (currentCard.feature === 'TRANSFER') {
+                // 1. 转嫁分支
+                if (alivePlayers.length > 2 && !hasTransferredThisTurn) {
+                    let optionsHTML = '';
+                    players.forEach((p, idx) => {
+                        if(idx !== currentIndex && !p.isNihilist) optionsHTML += `<option value="${idx}">${p.name}</option>`;
+                    });
+                    actionAreaHTML = `
+                        <div style="border: 1px solid #333; padding: 10px; border-radius:4px; margin-bottom:10px; background: #111;">
+                            <span style="font-size:11px; color:var(--cyber-cyan)">⚡ 侦测到【转嫁功能】：允许指定他者替代作答</span>
+                            <div class="btn-group" style="margin-top:5px;">
+                                <select id="transfer-target" style="margin-bottom:0; padding:6px; flex:2;"></select>
+                                <button onclick="executeCardTransfer()" style="flex:1; border-color:var(--cyber-cyan);">抛出卡牌</button>
+                            </div>
+                        </div>`;
+                    setTimeout(() => { document.getElementById('transfer-target').innerHTML = optionsHTML; }, 10);
+                } else if (alivePlayers.length === 2 && !hasTransferredThisTurn) {
+                    const enemyIdx = players.findIndex((p, idx) => idx !== currentIndex && !p.isNihilist);
+                    actionAreaHTML = `<button onclick="executeCardTransfer(${enemyIdx})" style="border-color:var(--accent-red); margin-bottom:10px;">⚡ 命运逆转：强行塞给对手作答</button>`;
+                }
+                
+                // 转嫁卡不具备共鸣或沉默功能，提供唯一的标准解封选项
+                actionAreaHTML += `<button onclick="acceptSingleTrial()" style="border-color:var(--text-main); background:#111;">👁 独自承受解封作答</button>`;
+
+            } else if (currentCard.feature === 'RESONANCE') {
+                // 2. 共鸣分支
+                actionAreaHTML = `
+                    <button onclick="triggerGlobalResonance()" style="border-color:var(--accent-green); background:#111; color: var(--accent-green);">🔥 触发全场共鸣协议 (全体起誓回答)</button>
+                    <button onclick="acceptSingleTrial()" style="border-color:#444; font-size:10px; color:#666;">[放弃共鸣] 选择独自承受解封</button>
+                `;
+            } else if (currentCard.feature === 'SILENT') {
+                // 3. 【全新引入】沉默分支：只有此类隐私或高难度命题允许启动沉默功能
+                actionAreaHTML = `
+                    <button onclick="executeSilenceProtocol()" style="border-color:var(--accent-red); background:#1a0c0e; color:#ff6666;">🤫 启动【缄默协议】(放弃本轮答题与得分)</button>
+                    <button onclick="acceptSingleTrial()" style="border-color:var(--cyber-cyan);">📝 迎难而上：强行直面作答</button>
+                `;
+            } else {
+                // 4. 普通卡牌没有任何功能
+                actionAreaHTML = `<button onclick="acceptSingleTrial()" style="border-color:var(--cyber-cyan); background:#111;">👁 直面真实：独自承受解封</button>`;
+            }
+
+            panel.innerHTML = `
+                ${actionAreaHTML}
+                <p style="font-size:11px; color:#444; text-align:center; margin-top:8px;">[提示] 确认操作或点击卡牌后，将会自动显化正面真相</p>
+            `;
+        }
+
+        // 机制：执行沉默功能（不回答不得分，损耗极低理智保全大局）
+        function executeSilenceProtocol() {
+            const speaker = players[currentIndex];
+            speaker.sanity = Math.max(0, speaker.sanity - 5); // 保持沉默仅扣除5%的直面阵痛理智
+            
+            pushLog("精神防御", `${speaker.name} 对该隐私命题启动了【缄默协议】。其遁入深渊沉思，未获得任何LP点数。`);
+            alert(`【缄默协议启动成功】\n\n${speaker.name} 选择了用沉默捍卫隐私。本轮不得分，理智微损 5%。`);
+            
+            if(speaker.sanity <= 0) speaker.isNihilist = true;
+            checkGameOverAndRotate();
+        }
+
+        function executeCardTransfer(forcedTarget = null) {
+            let targetIdx = forcedTarget;
+            if (targetIdx === null) targetIdx = parseInt(document.getElementById('transfer-target').value);
+            
+            pushLog("因果流转", `${players[currentIndex].name} 视破卡牌因果，将其转嫁给 ${players[targetIdx].name}`);
+            currentIndex = targetIdx;
+            hasTransferredThisTurn = true; 
+            
+            updateUI();
+            syncCardDOM();
+            renderStrategyOptions();
+        }
+
+        function triggerGlobalResonance() {
+            pushLog("集群共振", `已触发【全场共鸣】！群体心智力场正在同步连线。`);
+            document.getElementById('card-inner-object').classList.add('is-flipped'); 
+            syncCardDOM();
+            
+            const panel = document.getElementById('control-panel');
+            panel.innerHTML = `
+                <div style="background:#111; padding:12px; font-size:11px; color:var(--accent-green); margin-bottom:10px; border-radius:4px; border: 1px solid #222;">
+                    <b>🔊 共鸣规则：</b>全桌所有人必须轮流阐述内心真实想法。当全桌交流完毕后，开启多模态集群审判！
+                </div>
+                <button onclick="enterResonanceVotingPhase()" style="background:#1a1a1a; border-color:var(--accent-green);">全体陈述完毕，开启无记名大审判 ──></button>
+            `;
+        }
+
+        function acceptSingleTrial() {
+            document.getElementById('card-inner-object').classList.add('is-flipped'); 
+            syncCardDOM();
+            
+            const panel = document.getElementById('control-panel');
+            panel.innerHTML = `
+                <button id="mic-btn" style="border-color:var(--cyber-cyan)" onclick="toggleMic()">🎙 开启语音自白流听写</button>
+                <textarea id="reply-text" placeholder="语音实时听写或手动键入的思想痕迹将在此处流转..."></textarea>
+                <button onclick="enterSingleVotingPhase()" style="background:#141414;">确认陈述，送交外部评审 ──></button>
+            `;
+        }
+
+        function enterSingleVotingPhase() {
+            const txt = document.getElementById('reply-text').value.trim();
+            if(!txt) return alert("空无的文本无法承载精神质感。");
+            if(isRecording) toggleMic();
+
+            const panel = document.getElementById('control-panel');
+            const totalActiveJury = players.filter(p => !p.isNihilist).length - 1;
+
+            panel.innerHTML = `
+                <div style="background:#0d0d0d; padding:10px; font-size:11px; color:#999; border:1px solid #1a1a1a; margin-bottom:10px;"><b>陈述存证:</b> "${txt}"</div>
+                <div class="vote-box">
+                    <span style="font-size:11px; color:var(--accent-red)">[ ⚖️ 全场盲闭物理盲投中心 ]</span>
+                    <p style="font-size:10px; color:#666; margin:5px 0;">除答题者外，其余评审在桌底暗中切牌（正面真诚，反面伪善），随后在此录入结果：</p>
+                    <div class="counter-grid">
+                        <div>
+                            <span style="color:var(--accent-green); font-size:11px;">🟢 真诚(通过)</span>
+                            <input type="number" id="v-sincere" value="0" min="0">
+                        </div>
+                        <div>
+                            <span style="color:var(--accent-red); font-size:11px;">🔴 伪善(反噬)</span>
+                            <input type="number" id="v-hypocrite" value="0" min="0">
+                        </div>
+                    </div>
+                    <button onclick="settleSinglePoints()" style="background:var(--accent-red); border:none; color:#fff;">敲定法槌，演进世界线</button>
+                </div>
+            `;
+        }
+
+        function settleSinglePoints() {
+            const sin = parseInt(document.getElementById('v-sincere').value) || 0;
+            const hyp = parseInt(document.getElementById('v-hypocrite').value) || 0;
+            const speaker = players[currentIndex];
+            let summary = "";
+
+            if (sin > hyp) {
+                speaker.lp += 3;
+                summary = `【真诚共鸣】 成功自证，获得 3 LP。`;
+            } else {
+                speaker.sanity = Math.max(0, speaker.sanity - 25);
+                summary = `【判定伪善】 遭到逻辑与情感反噬，扣除 25% 理智。`;
+                if(speaker.sanity <= 0) { speaker.isNihilist = true; summary += ` [坠入虚无主义]`; }
+            }
+
+            pushLog("裁决结算", `${speaker.name} 独自面对结果：${summary}`);
+            alert(`【审判录入成功】\n\n${speaker.name}：${summary}`);
+            checkGameOverAndRotate();
+        }
+
+        function enterResonanceVotingPhase() {
+            const panel = document.getElementById('control-panel');
+            panel.innerHTML = '';
+            
+            let checkboxesHTML = '';
+            players.forEach((p, idx) => {
+                if (!p.isNihilist) {
+                    checkboxesHTML += `
+                        <label class="cb-label">
+                            <input type="checkbox" class="resonance-check" value="${idx}" checked>
+                            <span>公投通过：<b>${p.name}</b> 的表现听起来足够真实</span>
+                        </label>`;
+                }
+            });
+
+            panel.innerHTML = `
+                <div class="vote-box" style="border-color:var(--accent-green)">
+                    <span style="font-size:11px; color:var(--accent-green)">[ ⚖️ 全场集体公意公投 ]</span>
+                    <p style="font-size:10px; color:#666; margin:5px 0 12px 0;">全桌举手表决。凡是获得全场半数以上赞同票的人，请在下方保持勾选；被公认虚伪或敷衍回避的，请取消勾选：</p>
+                    ${checkboxesHTML}
+                    <button onclick="settleResonancePoints()" style="background:var(--accent-green); border:none; color:#000; margin-top:5px;">汇总集体意志，结算得分</button>
+                </div>
+            `;
+        }
+
+        function settleResonancePoints() {
+            const checks = document.querySelectorAll('.resonance-check');
+            let logMsg = "集群决策报告:\\n";
+
+            checks.forEach(cb => {
+                const idx = parseInt(cb.value);
+                const p = players[idx];
+                if (cb.checked) {
+                    p.lp += 2; 
+                    logMsg += `* [${p.name}] 真诚过关，获得 2 LP。\n`;
+                } else {
+                    p.sanity = Math.max(0, p.sanity - 20); 
+                    logMsg += `* [${p.name}] 被公认不真诚，扣除 20% 理智。\n`;
+                    if(p.sanity <= 0 && !p.isNihilist) {
+                        p.isNihilist = true;
+                        logMsg += `  └── ${p.name} 跌落理智奇点！\n`;
+                    }
+                }
+            });
+
+            pushLog("集群公决", "集体大审判法槌落下。");
+            alert(`【全场共鸣审判成功录入】\n\n${logMsg}`);
+            checkGameOverAndRotate();
+        }
+
+        function checkGameOverAndRotate() {
+            let winner = players.find(p => p.lp >= 20 && !p.isNihilist);
+            if(winner) {
+                alert(`🎉【意识飞升触发】\n\n恭喜主体 ${winner.name} 率先突破 20 LP 界碑！解构了剧场的幻象，赢得胜利。`);
+                location.reload();
+                return;
+            }
+
+            if (players.filter(p => !p.isNihilist).length === 0) {
+                alert(`💀【全员虚无灾难】\n\n全场所有主体的理智均已归零。世界线彻底坍缩，无人生还。`);
+                location.reload();
+                return;
+            }
+
+            do {
+                currentIndex = (currentIndex + 1) % players.length;
+            } while (players[currentIndex].isNihilist);
+
+            updateUI();
+            renderTurnStart();
+        }
+
+        function initSpeech() {
+            const SpeechClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if(!SpeechClass) return;
+            recognition = new SpeechClass(); recognition.lang = 'zh-CN';
+            recognition.continuous = true; recognition.interimResults = true;
+            recognition.onresult = (e) => {
+                let res = '';
+                for (let i = e.resultIndex; i < e.results.length; ++i) { if (e.results[i].isFinal) res += e.results[i][0].transcript; }
+                if(res) document.getElementById('reply-text').value += res;
+            };
+        }
+
+        function toggleMic() {
+            if(!recognition) return alert('当前运行环境未开放语音硬件接口。');
+            if(!isRecording) {
+                recognition.start(); isRecording = true;
+                document.getElementById('mic-btn').innerText = "✕ 终止声学捕捉";
+                document.getElementById('mic-btn').style.background = "var(--accent-red)";
+            } else {
+                recognition.stop(); isRecording = false;
+                document.getElementById('mic-btn').innerText = "🎙 开启语音自白流听写";
+                document.getElementById('mic-btn').style.background = "#141414";
+            }
+        }
+
+        function pushLog(title, text) {
+            const log = document.getElementById('log-panel');
+            log.innerHTML = `[${title}] ${text}<br>` + log.innerHTML;
+        }
+    </script>
+</body>
+</html>
